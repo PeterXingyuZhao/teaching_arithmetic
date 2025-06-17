@@ -517,7 +517,8 @@ def evaluate_addition_new(config, model, ctx, encode, decode, verbose=False, num
 # making a function to batch evaluate addition
 # same as evaluate_addition_new but with batch-wise generation
 def evaluate_addition_batch(config, model, ctx, encode, decode, verbose=False, num_digit=3, zero_pad=False, reverse_ab=False, reverse_c=False,
-                            algo_reason=False, binary=False, fewshot=False, data_type='binary', operator='+', data_format='plain', verbose_correct=False, analyze=False):
+                            algo_reason=False, binary=False, fewshot=False, data_type='binary', operator='+', data_format='plain', verbose_correct=False, analyze=False, iter_num=0):
+    all_examples = []
     model.eval()
     start = config['start'] if 'start' in config.keys() else "FILE:prompt/prompt_addition_pad_test_0.01.txt"
     device = config['device']
@@ -668,6 +669,9 @@ def evaluate_addition_batch(config, model, ctx, encode, decode, verbose=False, n
                         c = str(c)
 
                     if op in ['+','-','*']:
+                        operands = '{a}{op}{b}={c}'
+                        result = c
+                        all_examples.append((operands, result, c_hat2))
                         if c == c_hat2:
                             correct+=1
                             carry_dictionary[f'carry{num_carry}_correct']+=1
@@ -708,6 +712,8 @@ def evaluate_addition_batch(config, model, ctx, encode, decode, verbose=False, n
                         error, _, _ = get_error_metric(c, c_hat2, 'accuracy', eps=5e-3, list_not_num=list_not_num, list_outlier_num=list_outlier_num)
                         error_dict[f'accuracy_eps5e-3'].append(error * 100)
     
+    all_examples.sort(key=lambda x: x[0])  # Sort by operands
+    
     accuracy = correct/total*100
     print(f"accuracy of {total} examples: {correct}/{total} ({accuracy}%)")
     accuracy_dictionary = {f'carry{i}': carry_dictionary[f'carry{i}_correct']/carry_dictionary[f'carry{i}_total']*100 if carry_dictionary[f'carry{i}_total']!=0 else np.nan \
@@ -728,7 +734,7 @@ def evaluate_addition_batch(config, model, ctx, encode, decode, verbose=False, n
         print('skipped since outlier number: ', list_outlier_num)
     model.train()
 
-    return accuracy, accuracy_dictionary
+    return accuracy, accuracy_dictionary, all_examples
 
 
 # for evaluatin multiple digit addition

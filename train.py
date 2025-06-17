@@ -451,9 +451,43 @@ while True:
                     digit_accuracy_dictionary[f"digit_{digit}"].append(digit_accuracy)
                     this_dictionary[f"digit_{digit}"] = digit_accuracy
             config['start'] = start
-            test_accuracy, _ = evaluate_addition_batch(config, model, ctx, encode, decode, verbose=True, num_digit=num_digit, zero_pad=zero_pad, 
+            test_accuracy, _, all_examples = evaluate_addition_batch(config, model, ctx, encode, decode, verbose=True, num_digit=num_digit, zero_pad=zero_pad, 
                                                        reverse_ab=reverse_ab, reverse_c=reverse_c, algo_reason=algo_reason, 
                                                        binary=binary, data_type=data_type, operator=operator, data_format=data_format)
+            # Create new DataFrame with operands and actual results
+            new_df = pd.DataFrame({
+                'operands': [ex[0] for ex in all_examples],
+                'actual': [ex[1] for ex in all_examples],
+                f'pred_iter_{iter_num}': [ex[3] for ex in all_examples]
+            })
+            
+            test_name = f'main_test_file'
+            results_file = os.path.join(result_dir, f'{test_name}_results.csv')
+            # Read existing results if file exists and merge
+            if os.path.exists(results_file):
+                old_df = pd.read_csv(results_file)
+                # # Merge based on operands, keeping all predictions
+                # if 'operands' in old_df.columns:
+                #     merged_df = pd.merge(old_df, new_df, on=['operands', 'actual'], how='outer')
+                # else:
+                #     merged_df = new_df
+                # ── Normalize keys so they truly match ──
+                for df in (old_df, new_df):
+                    # strip whitespace from the operands strings
+                    df['operands'] = df['operands'].str.strip()
+                    # ensure actual is an integer
+                    df['actual']   = df['actual'].astype(int)
+
+                merged_df = pd.merge(
+                    old_df, new_df,
+                    on=['operands', 'actual'],
+                    how='outer'
+                )
+            else:
+                merged_df = new_df
+            
+            # Save results
+            merged_df.to_csv(results_file, index=False)
         if eval_addition_ar:
             config['start'] = start_ar
             test_accuracy_ar, _ = evaluate_addition_batch(config, model, ctx, encode, decode, verbose=True, num_digit=num_digit, zero_pad=zero_pad, 
@@ -487,6 +521,8 @@ while True:
             if multi_digit:
                 wandb_dict.update(this_dictionary)
             wandb.log(wandb_dict)
+
+        
 
         result_dict['iter'].append(iter_num)
         result_dict['train_loss'].append(losses['train'].item())
